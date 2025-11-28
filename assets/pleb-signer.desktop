@@ -1,0 +1,32 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Pleb Signer
+GenericName=Nostr Signer
+Comment=NIP-55 compatible Nostr signer for Linux
+Exec=pleb-signer
+Icon=security-high
+Terminal=false
+Categories=Utility;Security;Network;
+Keywords=nostr;bitcoin;signer;keys;crypto;
+StartupNotify=true
+StartupWMClass=pleb-signer
+
+# D-Bus activation
+X-GNOME-UsesNotifications=true
+X-KDE-StartupNotify=true
+
+# Actions
+Actions=show;lock;quit;
+
+[Desktop Action show]
+Name=Show Window
+Exec=pleb-signer --show
+
+[Desktop Action lock]
+Name=Lock Signer
+Exec=pleb-signer --lock
+
+[Desktop Action quit]
+Name=Quit
+Exec=pleb-signer --quit

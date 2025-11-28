@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+ "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node name="/com/plebsigner/Signer">
+  <interface name="com.plebsigner.Signer1">
+    
+    <!-- Get the signer version -->
+    <method name="Version">
+      <arg name="version" type="s" direction="out"/>
+    </method>
+    
+    <!-- Check if signer is unlocked and ready -->
+    <method name="IsReady">
+      <arg name="ready" type="b" direction="out"/>
+    </method>
+    
+    <!-- List all available keys (public info only) -->
+    <method name="ListKeys">
+      <arg name="keys_json" type="s" direction="out"/>
+    </method>
+    
+    <!-- Get the public key for a specific key or the active key -->
+    <method name="GetPublicKey">
+      <arg name="key_id" type="s" direction="in"/>
+      <arg name="result_json" type="s" direction="out"/>
+    </method>
+    
+    <!-- Sign a Nostr event -->
+    <method name="SignEvent">
+      <arg name="event_json" type="s" direction="in"/>
+      <arg name="key_id" type="s" direction="in"/>
+      <arg name="app_id" type="s" direction="in"/>
+      <arg name="result_json" type="s" direction="out"/>
+    </method>
+    
+    <!-- NIP-04 encrypt -->
+    <method name="Nip04Encrypt">
+      <arg name="plaintext" type="s" direction="in"/>
+      <arg name="recipient_pubkey" type="s" direction="in"/>
+      <arg name="key_id" type="s" direction="in"/>
+      <arg name="app_id" type="s" direction="in"/>
+      <arg name="result_json" type="s" direction="out"/>
+    </method>
+    
+    <!-- NIP-04 decrypt -->
+    <method name="Nip04Decrypt">
+      <arg name="ciphertext" type="s" direction="in"/>
+      <arg name="sender_pubkey" type="s" direction="in"/>
+      <arg name="key_id" type="s" direction="in"/>
+      <arg name="app_id" type="s" direction="in"/>
+      <arg name="result_json" type="s" direction="out"/>
+    </method>
+    
+    <!-- NIP-44 encrypt -->
+    <method name="Nip44Encrypt">
+      <arg name="plaintext" type="s" direction="in"/>
+      <arg name="recipient_pubkey" type="s" direction="in"/>
+      <arg name="key_id" type="s" direction="in"/>
+      <arg name="app_id" type="s" direction="in"/>
+      <arg name="result_json" type="s" direction="out"/>
+    </method>
+    
+    <!-- NIP-44 decrypt -->
+    <method name="Nip44Decrypt">
+      <arg name="ciphertext" type="s" direction="in"/>
+      <arg name="sender_pubkey" type="s" direction="in"/>
+      <arg name="key_id" type="s" direction="in"/>
+      <arg name="app_id" type="s" direction="in"/>
+      <arg name="result_json" type="s" direction="out"/>
+    </method>
+    
+    <!-- Decrypt a zap event -->
+    <method name="DecryptZapEvent">
+      <arg name="event_json" type="s" direction="in"/>
+      <arg name="key_id" type="s" direction="in"/>
+      <arg name="app_id" type="s" direction="in"/>
+      <arg name="result_json" type="s" direction="out"/>
+    </method>
+    
+    <!-- Generic request (JSON-based) -->
+    <method name="Request">
+      <arg name="request_json" type="s" direction="in"/>
+      <arg name="app_id" type="s" direction="in"/>
+      <arg name="result_json" type="s" direction="out"/>
+    </method>
+    
+  </interface>
+</node>

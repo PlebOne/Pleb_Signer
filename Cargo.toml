@@ -1,0 +1,73 @@
+[package]
+name = "pleb-signer"
+version = "0.1.0"
+edition = "2021"
+description = "A Linux NIP-55 compatible Nostr signer application"
+authors = ["Pleb Signer Contributors"]
+license = "MIT"
+repository = "https://github.com/example/pleb-signer"
+keywords = ["nostr", "signer", "nip-55", "bitcoin", "linux"]
+categories = ["cryptography", "authentication"]
+
+[dependencies]
+# Nostr protocol - using rust-nostr ecosystem
+nostr = { version = "0.44", features = ["std", "nip04", "nip44", "nip49", "nip06"] }
+nostr-sdk = { version = "0.44", features = ["nip04", "nip44"] }
+nostr-keyring = { version = "0.44", features = ["async"] }
+
+# Async runtime
+tokio = { version = "1.40", features = ["full", "sync", "rt-multi-thread", "macros"] }
+
+# GUI - Using iced for modern, fast Rust-native UI
+iced = { version = "0.13", features = ["tokio", "multi-window"] }
+
+# System tray - using ksni for Linux system tray (compatible with XDG/StatusNotifier)
+ksni = "0.2"
+
+# D-Bus for IPC (Linux standard)
+zbus = { version = "4.4", features = ["tokio"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Configuration
+directories = "5.0"
+toml = "0.8"
+
+# Hex encoding
+hex = "0.4"
+
+# Base64 encoding
+base64 = "0.22"
+
+# Error handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Time handling
+chrono = { version = "0.4", features = ["serde"] }
+
+# URL handling
+url = "2.5"
+
+# Async channel
+async-channel = "2.3"
+
+# Clipboard
+arboard = "3.4"
+
+# Async utilities  
+async-utility = "0.2"
+
+[dev-dependencies]
+tempfile = "3.12"
+
+[profile.release]
+opt-level = 3
+lto = true
+strip = true
