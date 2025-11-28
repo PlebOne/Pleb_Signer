@@ -3,9 +3,9 @@ name = "pleb-signer"
 version = "0.1.0"
 edition = "2021"
 description = "A Linux NIP-55 compatible Nostr signer application"
-authors = ["Pleb Signer Contributors"]
+authors = ["PlebOne <plebone@protonmail.com>"]
 license = "MIT"
-repository = "https://github.com/example/pleb-signer"
+repository = "https://github.com/PlebOne/Pleb_Signer"
 keywords = ["nostr", "signer", "nip-55", "bitcoin", "linux"]
 categories = ["cryptography", "authentication"]
 
