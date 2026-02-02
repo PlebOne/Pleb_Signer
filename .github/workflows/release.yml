@@ -57,4 +57,4 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: *.pkg.tar.zst
-          tag_name: ${{ github.event.inputs.tag_name }}
+          tag_name: "${{ github.event.inputs.tag_name }}"
