@@ -6,6 +6,7 @@ pkgdesc="A Linux NIP-55 compatible Nostr signer application"
 arch=('x86_64')
 url="https://github.com/PlebOne/Pleb_Signer"
 license=('MIT')
+options=('!lto' '!debug' '!strip')
 depends=('gtk3' 'dbus' 'libsecret' 'openssl' 'libxcb')
 makedepends=('cargo')
 source=("$pkgname-$pkgver.tar.gz::https://github.com/PlebOne/Pleb_Signer/archive/refs/tags/v$pkgver.tar.gz")
@@ -23,7 +24,8 @@ build() {
   cd "Pleb_Signer-$pkgver"
   export RUSTUP_TOOLCHAIN=stable
   export CARGO_TARGET_DIR=target
-  unset LDFLAGS
+  # Clear flags that might interfere with Rust linking
+  unset CFLAGS CXXFLAGS LDFLAGS RUSTFLAGS DEBUG_CFLAGS DEBUG_CXXFLAGS
   cargo build --release --all-features
 }
 
