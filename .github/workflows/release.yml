@@ -1,0 +1,60 @@
+name: Release
+
+on:
+  release:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag to release for'
+        required: true
+        default: 'v0.1.0'
+
+jobs:
+  build-arch:
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install dependencies
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm base-devel git rust cargo
+          
+      - name: Build package
+        run: |
+          # Create a non-root user for makepkg
+          useradd builduser -m
+          passwd -d builduser
+          printf 'builduser ALL=(ALL) ALL\n' | tee -a /etc/sudoers
+          
+          # Fix permissions
+          chown -R builduser:builduser .
+          
+          # Build
+          cd packaging/arch
+          sudo -u builduser makepkg -s --noconfirm
+          
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: arch-package
+          path: packaging/arch/*.pkg.tar.zst
+
+  upload-release-asset:
+    needs: build-arch
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: arch-package
+          
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: *.pkg.tar.zst
+          tag_name: ${{ github.event.inputs.tag_name }}

@@ -1,0 +1,37 @@
+# Maintainer: PlebOne <plebone@protonmail.com>
+pkgname=pleb-signer
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="A Linux NIP-55 compatible Nostr signer application"
+arch=('x86_64')
+url="https://github.com/PlebOne/Pleb_Signer"
+license=('MIT')
+depends=('gtk3' 'dbus' 'libsecret' 'openssl' 'libxcb')
+makedepends=('cargo')
+source=("$pkgname-$pkgver.tar.gz::https://github.com/PlebOne/Pleb_Signer/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+prepare() {
+  cd "Pleb_Signer-$pkgver"
+  # Disable LTO to avoid linker errors
+  sed -i 's/lto = true/lto = false/' Cargo.toml
+  export RUSTUP_TOOLCHAIN=stable
+  cargo fetch --target "$CARCH-unknown-linux-gnu"
+}
+
+build() {
+  cd "Pleb_Signer-$pkgver"
+  export RUSTUP_TOOLCHAIN=stable
+  export CARGO_TARGET_DIR=target
+  unset LDFLAGS
+  cargo build --release --all-features
+}
+
+package() {
+  cd "Pleb_Signer-$pkgver"
+  install -Dm755 target/release/pleb-signer "$pkgdir/usr/bin/pleb-signer"
+  install -Dm644 assets/pleb-signer.desktop "$pkgdir/usr/share/applications/pleb-signer.desktop"
+  install -Dm644 assets/com.plebsigner.Signer.service "$pkgdir/usr/share/dbus-1/services/com.plebsigner.Signer.service"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+}
