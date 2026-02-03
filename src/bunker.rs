@@ -8,6 +8,7 @@ use crate::keys::KeyManager;
 use nostr::prelude::*;
 use nostr_sdk::prelude::*;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::Mutex;
 use tracing::{error, info, warn};
 
@@ -30,6 +31,10 @@ pub struct BunkerSigner {
     state: Arc<Mutex<BunkerState>>,
     relays: Vec<String>,
     secret: Option<String>,
+    /// Flag to signal the listener thread to stop
+    stop_flag: Arc<AtomicBool>,
+    /// Handle to the listener thread
+    listener_handle: std::sync::Mutex<Option<std::thread::JoinHandle<()>>>,
 }
 
 impl BunkerSigner {
@@ -43,6 +48,8 @@ impl BunkerSigner {
                 "wss://relay.damus.io".to_string(),
             ],
             secret: None,
+            stop_flag: Arc::new(AtomicBool::new(false)),
+            listener_handle: std::sync::Mutex::new(None),
         }
     }
 
@@ -63,47 +70,7 @@ impl BunkerSigner {
         self.state.lock().await.clone()
     }
 
-    /// Generate a bunker connection URI (nostrconnect://)
-    /// 
-    /// This URI can be shared with remote clients to connect
-    pub async fn generate_connection_uri(&self) -> Result<String> {
-        let km = self.key_manager.lock().await;
-        let pubkey = km.get_active_pubkey()
-            .ok_or_else(|| SignerError::KeyNotFound("No active key".into()))?;
-        
-        // Build nostrconnect:// URI
-        // Format: nostrconnect://<pubkey>?relay=<relay>&relay=<relay>&secret=<secret>
-        let mut uri = format!("nostrconnect://{}", pubkey);
-        
-        let mut params = Vec::new();
-        for relay in &self.relays {
-            params.push(format!("relay={}", urlencoding::encode(relay)));
-        }
-        
-        if let Some(ref secret) = self.secret {
-            params.push(format!("secret={}", urlencoding::encode(secret)));
-        }
-        
-        // Add metadata
-        params.push("metadata=%7B%22name%22%3A%22Pleb%20Signer%22%7D".to_string());
-        
-        if !params.is_empty() {
-            uri.push('?');
-            uri.push_str(&params.join("&"));
-        }
-        
-        // Update state
-        let mut state = self.state.lock().await;
-        *state = BunkerState::WaitingForConnection {
-            connection_string: uri.clone(),
-        };
-        
-        Ok(uri)
-    }
-
     /// Generate a bunker:// URI for clients that support it
-    /// 
-    /// Format: bunker://<signer-pubkey>?relay=<relay>
     pub async fn generate_bunker_uri(&self) -> Result<String> {
         let km = self.key_manager.lock().await;
         let pubkey = km.get_active_pubkey()
@@ -130,24 +97,72 @@ impl BunkerSigner {
 
     /// Start listening for bunker connections
     /// 
-    /// This spawns a background task that handles incoming NIP-46 requests
+    /// This spawns a background THREAD (not tokio task) that handles incoming NIP-46 requests
     pub async fn start_listening(&self) -> Result<()> {
+        info!("Starting bunker listener...");
+        
+        // Check if already running
+        {
+            let handle = self.listener_handle.lock().unwrap();
+            if handle.is_some() {
+                info!("Bunker listener already running");
+                return Ok(());
+            }
+        }
+        
+        // Get the keys we need
         let mut km = self.key_manager.lock().await;
         let keys = km.get_signing_keys().await
             .map_err(|e| SignerError::NostrError(e.to_string()))?
             .clone();
         drop(km);
         
-        let state = self.state.clone();
-        let key_manager = self.key_manager.clone();
-        let relays = self.relays.clone();
-        let secret = self.secret.clone();
+        // Update state
+        {
+            let mut state = self.state.lock().await;
+            let pubkey = keys.public_key().to_hex();
+            *state = BunkerState::WaitingForConnection {
+                connection_string: format!("bunker://{}", pubkey),
+            };
+        }
         
-        tokio::spawn(async move {
-            if let Err(e) = run_bunker_listener(keys, relays, secret, state, key_manager).await {
-                error!("Bunker listener error: {}", e);
-            }
+        // Reset stop flag
+        self.stop_flag.store(false, Ordering::SeqCst);
+        
+        // Clone what we need for the thread
+        let state = Arc::clone(&self.state);
+        let key_manager = Arc::clone(&self.key_manager);
+        let relays = self.relays.clone();
+        let stop_flag = Arc::clone(&self.stop_flag);
+        
+        // Spawn a real OS thread with its own tokio runtime
+        let handle = std::thread::spawn(move || {
+            info!("Bunker listener thread started");
+            
+            // Create a new tokio runtime for this thread
+            let rt = match tokio::runtime::Runtime::new() {
+                Ok(rt) => rt,
+                Err(e) => {
+                    error!("Failed to create tokio runtime: {}", e);
+                    return;
+                }
+            };
+            
+            // Run the listener
+            rt.block_on(async {
+                if let Err(e) = run_bunker_listener(keys, relays, stop_flag, state, key_manager).await {
+                    error!("Bunker listener error: {}", e);
+                }
+            });
+            
+            info!("Bunker listener thread exiting");
         });
+        
+        // Store the handle
+        {
+            let mut guard = self.listener_handle.lock().unwrap();
+            *guard = Some(handle);
+        }
         
         info!("Bunker signer started listening on {} relays", self.relays.len());
         Ok(())
@@ -155,9 +170,31 @@ impl BunkerSigner {
 
     /// Stop the bunker listener
     pub async fn stop(&self) {
-        let mut state = self.state.lock().await;
-        *state = BunkerState::Disconnected;
-        // The background task will exit when it sees the disconnected state
+        info!("Stopping bunker listener...");
+        
+        // Signal the thread to stop
+        self.stop_flag.store(true, Ordering::SeqCst);
+        
+        // Update state
+        {
+            let mut state = self.state.lock().await;
+            *state = BunkerState::Disconnected;
+        }
+        
+        // Wait for thread to finish (with timeout)
+        let handle = {
+            let mut guard = self.listener_handle.lock().unwrap();
+            guard.take()
+        };
+        
+        if let Some(h) = handle {
+            // Give it a moment to finish
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            // We don't join because it might block, just let it finish
+            drop(h);
+        }
+        
+        info!("Bunker listener stopped");
     }
 }
 
@@ -185,64 +222,123 @@ mod urlencoding {
 async fn run_bunker_listener(
     keys: Keys,
     relays: Vec<String>,
-    _secret: Option<String>,
+    stop_flag: Arc<AtomicBool>,
     state: Arc<Mutex<BunkerState>>,
     key_manager: Arc<Mutex<KeyManager>>,
 ) -> Result<()> {
-    // Create a Nostr client for receiving requests
+    info!("Bunker listener initializing...");
+    
+    // Create a Nostr client
     let client = Client::new(keys.clone());
     
     // Add relays
     for relay in &relays {
+        info!("Adding relay: {}", relay);
         if let Err(e) = client.add_relay(relay).await {
             warn!("Failed to add relay {}: {}", relay, e);
         }
     }
     
+    // Connect
+    info!("Connecting to relays...");
     client.connect().await;
+    info!("Connected to relays");
     
-    // Subscribe to NIP-46 requests (kind 24133) addressed to our pubkey
+    // Subscribe to NIP-46 requests addressed to our pubkey
     let pubkey = keys.public_key();
     let filter = Filter::new()
         .kind(Kind::NostrConnect)
         .pubkey(pubkey)
         .since(Timestamp::now());
     
+    info!("Subscribing to NIP-46 events for pubkey: {}", pubkey.to_bech32().unwrap_or_default());
     client.subscribe(filter, None).await
         .map_err(|e| SignerError::DbusError(e.to_string()))?;
     
-    info!("Bunker listening for NIP-46 requests on pubkey: {}", pubkey.to_bech32().unwrap_or_default());
+    info!("Bunker listener ready and waiting for connections...");
     
-    // Handle incoming events
-    client.handle_notifications(|notification| async {
-        let state = state.clone();
-        let key_manager = key_manager.clone();
-        let keys = keys.clone();
+    // Main event loop using handle_notifications with periodic checks
+    loop {
+        // Check stop flag first
+        if stop_flag.load(Ordering::SeqCst) {
+            info!("Stop flag set, exiting bunker listener");
+            break;
+        }
         
-        if let RelayPoolNotification::Event { event, .. } = notification {
-            if event.kind == Kind::NostrConnect {
-                match handle_nip46_request(&event, &keys, &key_manager, &state).await {
-                    Ok(response) => {
-                        info!("Processed NIP-46 request successfully");
-                        // Response would be sent back via relay
-                        let _ = response;
+        // Clone state for closure
+        let state_clone = Arc::clone(&state);
+        let key_manager_clone = Arc::clone(&key_manager);
+        let keys_clone = keys.clone();
+        let client_clone = client.clone();
+        let stop_flag_clone = Arc::clone(&stop_flag);
+        
+        // Handle notifications for a short period, then check stop flag
+        let handle_result = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            client.handle_notifications(|notification| {
+                let state = Arc::clone(&state_clone);
+                let key_manager = Arc::clone(&key_manager_clone);
+                let keys = keys_clone.clone();
+                let client_send = client_clone.clone();
+                let stop_flag = Arc::clone(&stop_flag_clone);
+                
+                async move {
+                    // Check stop flag
+                    if stop_flag.load(Ordering::SeqCst) {
+                        return Ok(true); // Signal to stop
                     }
-                    Err(e) => {
-                        error!("Failed to handle NIP-46 request: {}", e);
+                    
+                    if let RelayPoolNotification::Event { event, .. } = notification {
+                        if event.kind == Kind::NostrConnect {
+                            // Check if this is for us
+                            let our_pubkey = keys.public_key();
+                            let p_tags: Vec<_> = event.tags.public_keys().collect();
+                            
+                            if p_tags.contains(&&our_pubkey) {
+                                info!("Received NIP-46 request from {}", event.pubkey.to_bech32().unwrap_or_default());
+                                
+                                match handle_nip46_request(&event, &keys, &key_manager, &state).await {
+                                    Ok(Some(response)) => {
+                                        info!("Sending NIP-46 response");
+                                        if let Err(e) = client_send.send_event(&response).await {
+                                            error!("Failed to send response: {}", e);
+                                        }
+                                    }
+                                    Ok(None) => {}
+                                    Err(e) => {
+                                        error!("Error handling request: {}", e);
+                                    }
+                                }
+                            }
+                        }
                     }
+                    
+                    Ok(false) // Continue listening
                 }
+            })
+        ).await;
+        
+        // Check if we should exit
+        if stop_flag.load(Ordering::SeqCst) {
+            break;
+        }
+        
+        match handle_result {
+            Ok(Ok(())) => {
+                // Handler returned normally (signaled to stop)
+            }
+            Ok(Err(e)) => {
+                warn!("Notification handler error: {}", e);
+            }
+            Err(_) => {
+                // Timeout - this is expected, just continue loop
             }
         }
-        
-        // Check if we should stop
-        let current_state = state.lock().await;
-        if matches!(*current_state, BunkerState::Disconnected) {
-            return Ok(true); // Stop listening
-        }
-        
-        Ok(false) // Continue listening
-    }).await
-    .map_err(|e| SignerError::DbusError(e.to_string()))?;
+    }
+    
+    // Disconnect
+    client.disconnect().await;
+    info!("Bunker listener disconnected");
     
     Ok(())
 }
