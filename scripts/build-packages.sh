@@ -4,7 +4,7 @@ set -e
 # Build Pleb Signer packages (.deb and .rpm)
 # Run from the project root directory
 
-VERSION="0.1.0"
+VERSION="0.1.1"
 PACKAGE_NAME="pleb-signer"
 ARCH="amd64"
 
