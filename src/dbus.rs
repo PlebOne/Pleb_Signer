@@ -213,6 +213,56 @@ impl SignerInterface {
             Err(e) => DbusResponse::error(id, e),
         }
     }
+
+    /// Start bunker listener for NIP-46 remote signing
+    async fn start_bunker(&self) -> String {
+        let id = Self::generate_request_id();
+        
+        if let Err(e) = self.check_ready().await {
+            return DbusResponse::error(id, e);
+        }
+
+        let mut state = self.app_state.write().await;
+        match state.start_bunker().await {
+            Ok(uri) => DbusResponse::success(id, uri),
+            Err(e) => DbusResponse::error(id, e),
+        }
+    }
+
+    /// Get bunker connection URI
+    async fn get_bunker_uri(&self) -> String {
+        let id = Self::generate_request_id();
+        
+        if let Err(e) = self.check_ready().await {
+            return DbusResponse::error(id, e);
+        }
+
+        let state = self.app_state.read().await;
+        match state.get_bunker_uri().await {
+            Ok(uri) => DbusResponse::success(id, uri),
+            Err(e) => DbusResponse::error(id, e),
+        }
+    }
+
+    /// Stop bunker listener
+    async fn stop_bunker(&self) -> String {
+        let id = Self::generate_request_id();
+        
+        let state = self.app_state.read().await;
+        state.stop_bunker().await;
+        
+        DbusResponse::success(id, "Bunker stopped")
+    }
+
+    /// Get bunker state
+    async fn get_bunker_state(&self) -> String {
+        let id = Self::generate_request_id();
+        
+        let state = self.app_state.read().await;
+        let bunker_state = state.get_bunker_state().await;
+        
+        DbusResponse::success(id, format!("{:?}", bunker_state))
+    }
 }
 
 /// D-Bus service runner

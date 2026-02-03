@@ -50,7 +50,7 @@ fn main() -> Result<()> {
     let runtime = tokio::runtime::Runtime::new()?;
     
     // Load configuration and initialize state in the runtime
-    let (_config, _key_manager, app_state) = runtime.block_on(async {
+    let (_config, key_manager, app_state) = runtime.block_on(async {
         let config = Config::load().await?;
         info!("Configuration loaded");
 
@@ -68,21 +68,18 @@ fn main() -> Result<()> {
         // Initialize application state
         let app_state = Arc::new(RwLock::new(AppState::new(config.clone()).await?));
         
+        // Initialize bunker with key manager
+        {
+            let mut state = app_state.write().await;
+            state.init_bunker(Arc::clone(&key_manager));
+        }
+        
         Ok::<_, anyhow::Error>((config, key_manager, app_state))
     })?;
 
     // Clone for D-Bus service - IMPORTANT: load keys for D-Bus too
     let dbus_state = Arc::clone(&app_state);
-    let dbus_km = Arc::new(Mutex::new(KeyManager::new()));
-    
-    // Load keys for D-Bus KeyManager
-    let dbus_km_init = Arc::clone(&dbus_km);
-    runtime.block_on(async {
-        let mut km = dbus_km_init.lock().await;
-        if let Err(e) = km.load().await {
-            tracing::warn!("Failed to load keys for D-Bus service: {}", e);
-        }
-    });
+    let dbus_km = Arc::clone(&key_manager);
 
     // Start D-Bus service in background on the runtime
     runtime.spawn(async move {
