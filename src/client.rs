@@ -423,8 +423,10 @@ impl PlebSignerClient {
         let result: String = proxy.call("GetBunkerUri", &()).await?;
         let response: SignerResponse = serde_json::from_str(&result)?;
         if response.success {
-            let uri = response.result.unwrap_or_default();
-            let uri = uri.trim_matches('"').to_string();
+            let uri_json = response.result.unwrap_or_default();
+            // Result is double-JSON encoded, parse it
+            let uri: String = serde_json::from_str(&uri_json)
+                .unwrap_or_else(|_| uri_json.trim_matches('"').to_string());
             Ok(uri)
         } else {
             Err(ClientError(response.error.unwrap_or_else(|| "Unknown error".into())))
