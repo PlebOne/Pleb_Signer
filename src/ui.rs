@@ -391,9 +391,26 @@ impl PlebSignerUi {
             
             Message::CopyBunkerUri => {
                 if let Some(ref uri) = self.bunker_uri {
-                    if let Ok(mut clipboard) = arboard::Clipboard::new() {
-                        let _ = clipboard.set_text(uri.clone());
+                    // Use wl-copy for Wayland (arboard doesn't work on Wayland)
+                    // Fall back to arboard for X11
+                    let copied = if std::env::var("WAYLAND_DISPLAY").is_ok() {
+                        // Wayland - use wl-copy
+                        std::process::Command::new("wl-copy")
+                            .arg(uri)
+                            .spawn()
+                            .map(|mut child| child.wait().is_ok())
+                            .unwrap_or(false)
+                    } else {
+                        // X11 - use arboard
+                        arboard::Clipboard::new()
+                            .and_then(|mut clip| clip.set_text(uri.clone()))
+                            .is_ok()
+                    };
+                    
+                    if copied {
                         self.success_message = Some("Bunker URI copied to clipboard!".into());
+                    } else {
+                        self.error_message = Some("Failed to copy to clipboard".into());
                     }
                 }
                 Task::none()
