@@ -32,10 +32,16 @@ pub struct DbusResponse {
 
 impl DbusResponse {
     fn success(id: String, result: impl Serialize) -> String {
+        // Convert to Value first to avoid double-encoding strings
+        let value = serde_json::to_value(&result).unwrap_or(serde_json::Value::Null);
+        let result_str = match value {
+            serde_json::Value::String(s) => s, // Don't re-encode strings
+            other => serde_json::to_string(&other).unwrap_or_default(),
+        };
         serde_json::to_string(&DbusResponse {
             success: true,
             id,
-            result: Some(serde_json::to_string(&result).unwrap_or_default()),
+            result: Some(result_str),
             error: None,
         }).unwrap_or_default()
     }
