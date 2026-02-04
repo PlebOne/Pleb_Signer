@@ -683,10 +683,12 @@ impl PlebSignerUi {
                     text("").size(4),
                     row![
                         button(text("📋 Copy URI")).on_press(Message::CopyBunkerUri),
-                        button(text("🔄 Regenerate")).on_press(Message::GenerateBunkerUri),
+                        button(text("🔄 Refresh")).on_press(Message::GenerateBunkerUri),
                     ]
                     .spacing(10),
                     text("").size(12),
+                    text("Status: Connected to relays, waiting for client").size(12).color([0.0, 0.6, 0.0]),
+                    text("").size(8),
                     text("How to use:").size(14),
                     text("1. Copy the URI above").size(12),
                     text("2. In your remote Nostr client, look for 'Login with Bunker'").size(12),

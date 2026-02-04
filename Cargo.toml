@@ -1,6 +1,6 @@
 [package]
 name = "pleb-signer"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2021"
 description = "A Linux NIP-55 compatible Nostr signer application"
 authors = ["PlebOne <plebone@protonmail.com>"]
