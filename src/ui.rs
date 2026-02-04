@@ -441,7 +441,6 @@ impl PlebSignerUi {
             text("⚡ Pleb Signer").size(28),
             horizontal_space(),
             button(text("Keys")).on_press(Message::NavigateTo(ViewState::KeyManagement)),
-            button(text("Bunker")).on_press(Message::NavigateTo(ViewState::Bunker)),
             button(text("Settings")).on_press(Message::NavigateTo(ViewState::Settings)),
         ]
         .spacing(10)
@@ -455,17 +454,10 @@ impl PlebSignerUi {
             "No active key selected".to_string()
         };
         
-        let bunker_status = if self.bunker_enabled {
-            "🌐 Bunker: Active (remote signing enabled)"
-        } else {
-            "Bunker: Off"
-        };
-        
         let status = column![
             text("Status: Ready").size(16),
             text(active_key_text).size(14),
             text(format!("Keys: {}", self.keys_list.len())).size(14),
-            text(bunker_status).size(14),
         ]
         .spacing(8);
         
