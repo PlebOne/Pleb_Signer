@@ -10,25 +10,8 @@ use iced::{
 
 use crate::keys::{KeyManager, KeyMetadata};
 use crate::config::Config;
+use crate::client::PlebSignerClient;
 use crate::error::SignerError;
-
-/// Simple URL encoding for bunker URIs
-fn urlencoding(s: &str) -> String {
-    let mut result = String::new();
-    for c in s.chars() {
-        match c {
-            'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_' | '.' | '~' => {
-                result.push(c);
-            }
-            _ => {
-                for byte in c.to_string().as_bytes() {
-                    result.push_str(&format!("%{:02X}", byte));
-                }
-            }
-        }
-    }
-    result
-}
 
 /// Main view states
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -341,32 +324,51 @@ impl PlebSignerUi {
             Message::ToggleBunker(enabled) => {
                 self.bunker_enabled = enabled;
                 if enabled {
-                    // Generate URI when enabling
-                    return self.update(Message::GenerateBunkerUri);
+                    // Call D-Bus to start the bunker
+                    Task::perform(
+                        async move {
+                            match PlebSignerClient::new("pleb-signer-ui").await {
+                                Ok(client) => {
+                                    client.start_bunker().await
+                                        .map_err(|e| e.to_string())
+                                }
+                                Err(e) => Err(e.to_string())
+                            }
+                        },
+                        Message::BunkerUriGenerated,
+                    )
                 } else {
+                    // Call D-Bus to stop the bunker
                     self.bunker_uri = None;
+                    Task::perform(
+                        async move {
+                            if let Ok(client) = PlebSignerClient::new("pleb-signer-ui").await {
+                                let _ = client.stop_bunker().await;
+                            }
+                            Ok::<(), String>(())
+                        },
+                        |_| Message::Noop,
+                    )
                 }
-                Task::none()
             }
             
             Message::GenerateBunkerUri => {
-                let km = self.key_manager.clone();
+                // Call D-Bus to get or start the bunker
                 Task::perform(
                     async move {
-                        let manager = km.lock().await;
-                        if let Some(pubkey) = manager.get_active_pubkey() {
-                            // Generate bunker URI
-                            let relays = vec![
-                                "wss://relay.nsec.app",
-                                "wss://relay.damus.io",
-                            ];
-                            let relay_params: Vec<String> = relays.iter()
-                                .map(|r| format!("relay={}", urlencoding(r)))
-                                .collect();
-                            let uri = format!("bunker://{}?{}", pubkey, relay_params.join("&"));
-                            Ok(uri)
-                        } else {
-                            Err("No active key configured".to_string())
+                        match PlebSignerClient::new("pleb-signer-ui").await {
+                            Ok(client) => {
+                                // First try to get existing URI, if not start bunker
+                                match client.get_bunker_state().await {
+                                    Ok(state) if state.contains("WaitingForConnection") || state.contains("Connected") => {
+                                        client.get_bunker_uri().await.map_err(|e| e.to_string())
+                                    }
+                                    _ => {
+                                        client.start_bunker().await.map_err(|e| e.to_string())
+                                    }
+                                }
+                            }
+                            Err(e) => Err(e.to_string())
                         }
                     },
                     Message::BunkerUriGenerated,

@@ -1,3 +1,5 @@
 blog/
 /target/
 Cargo.lock
+build/
+release/

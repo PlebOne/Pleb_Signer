@@ -52,6 +52,42 @@ pub struct KeyInfo {
     pub is_default: bool,
 }
 
+/// Client error type that is Send + Sync
+#[derive(Debug, Clone)]
+pub struct ClientError(pub String);
+
+impl std::fmt::Display for ClientError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl std::error::Error for ClientError {}
+
+impl From<zbus::Error> for ClientError {
+    fn from(e: zbus::Error) -> Self {
+        ClientError(e.to_string())
+    }
+}
+
+impl From<serde_json::Error> for ClientError {
+    fn from(e: serde_json::Error) -> Self {
+        ClientError(e.to_string())
+    }
+}
+
+impl From<String> for ClientError {
+    fn from(s: String) -> Self {
+        ClientError(s)
+    }
+}
+
+impl From<&str> for ClientError {
+    fn from(s: &str) -> Self {
+        ClientError(s.to_string())
+    }
+}
+
 /// Pleb Signer client
 pub struct PlebSignerClient {
     connection: Connection,
@@ -60,7 +96,7 @@ pub struct PlebSignerClient {
 
 impl PlebSignerClient {
     /// Create a new client with the given application ID
-    pub async fn new(app_id: &str) -> Result<Self, Box<dyn std::error::Error>> {
+    pub async fn new(app_id: &str) -> Result<Self, ClientError> {
         let connection = Connection::session().await?;
         Ok(Self {
             connection,
@@ -82,7 +118,7 @@ impl PlebSignerClient {
     }
 
     /// Check if the signer is unlocked and ready
-    pub async fn is_ready(&self) -> Result<bool, Box<dyn std::error::Error>> {
+    pub async fn is_ready(&self) -> Result<bool, ClientError> {
         let proxy = Proxy::new(
             &self.connection,
             "com.plebsigner.Signer",
@@ -96,7 +132,7 @@ impl PlebSignerClient {
     }
 
     /// Get the signer version
-    pub async fn version(&self) -> Result<String, Box<dyn std::error::Error>> {
+    pub async fn version(&self) -> Result<String, ClientError> {
         let proxy = Proxy::new(
             &self.connection,
             "com.plebsigner.Signer",
@@ -110,7 +146,7 @@ impl PlebSignerClient {
     }
 
     /// List all available keys
-    pub async fn list_keys(&self) -> Result<Vec<KeyInfo>, Box<dyn std::error::Error>> {
+    pub async fn list_keys(&self) -> Result<Vec<KeyInfo>, ClientError> {
         let proxy = Proxy::new(
             &self.connection,
             "com.plebsigner.Signer",
@@ -128,7 +164,7 @@ impl PlebSignerClient {
     pub async fn get_public_key(
         &self,
         key_id: Option<&str>,
-    ) -> Result<PublicKeyResult, Box<dyn std::error::Error>> {
+    ) -> Result<PublicKeyResult, ClientError> {
         let proxy = Proxy::new(
             &self.connection,
             "com.plebsigner.Signer",
@@ -146,7 +182,7 @@ impl PlebSignerClient {
                 serde_json::from_str(&response.result.unwrap_or_default())?;
             Ok(pubkey)
         } else {
-            Err(response.error.unwrap_or("Unknown error".into()).into())
+            Err(ClientError(response.error.unwrap_or_else(|| "Unknown error".into())))
         }
     }
 
@@ -155,7 +191,7 @@ impl PlebSignerClient {
         &self,
         event_json: &str,
         key_id: Option<&str>,
-    ) -> Result<SignedEventResult, Box<dyn std::error::Error>> {
+    ) -> Result<SignedEventResult, ClientError> {
         let proxy = Proxy::new(
             &self.connection,
             "com.plebsigner.Signer",
@@ -175,7 +211,7 @@ impl PlebSignerClient {
                 serde_json::from_str(&response.result.unwrap_or_default())?;
             Ok(signed)
         } else {
-            Err(response.error.unwrap_or("Unknown error".into()).into())
+            Err(ClientError(response.error.unwrap_or_else(|| "Unknown error".into())))
         }
     }
 
@@ -185,7 +221,7 @@ impl PlebSignerClient {
         plaintext: &str,
         recipient_pubkey: &str,
         key_id: Option<&str>,
-    ) -> Result<String, Box<dyn std::error::Error>> {
+    ) -> Result<String, ClientError> {
         let proxy = Proxy::new(
             &self.connection,
             "com.plebsigner.Signer",
@@ -208,7 +244,7 @@ impl PlebSignerClient {
                 serde_json::from_str(&response.result.unwrap_or_default())?;
             Ok(encrypted.ciphertext)
         } else {
-            Err(response.error.unwrap_or("Unknown error".into()).into())
+            Err(ClientError(response.error.unwrap_or_else(|| "Unknown error".into())))
         }
     }
 
@@ -218,7 +254,7 @@ impl PlebSignerClient {
         ciphertext: &str,
         sender_pubkey: &str,
         key_id: Option<&str>,
-    ) -> Result<String, Box<dyn std::error::Error>> {
+    ) -> Result<String, ClientError> {
         let proxy = Proxy::new(
             &self.connection,
             "com.plebsigner.Signer",
@@ -241,7 +277,7 @@ impl PlebSignerClient {
                 serde_json::from_str(&response.result.unwrap_or_default())?;
             Ok(decrypted.plaintext)
         } else {
-            Err(response.error.unwrap_or("Unknown error".into()).into())
+            Err(ClientError(response.error.unwrap_or_else(|| "Unknown error".into())))
         }
     }
 
@@ -251,7 +287,7 @@ impl PlebSignerClient {
         plaintext: &str,
         recipient_pubkey: &str,
         key_id: Option<&str>,
-    ) -> Result<String, Box<dyn std::error::Error>> {
+    ) -> Result<String, ClientError> {
         let proxy = Proxy::new(
             &self.connection,
             "com.plebsigner.Signer",
@@ -274,7 +310,7 @@ impl PlebSignerClient {
                 serde_json::from_str(&response.result.unwrap_or_default())?;
             Ok(encrypted.ciphertext)
         } else {
-            Err(response.error.unwrap_or("Unknown error".into()).into())
+            Err(ClientError(response.error.unwrap_or_else(|| "Unknown error".into())))
         }
     }
 
@@ -284,7 +320,7 @@ impl PlebSignerClient {
         ciphertext: &str,
         sender_pubkey: &str,
         key_id: Option<&str>,
-    ) -> Result<String, Box<dyn std::error::Error>> {
+    ) -> Result<String, ClientError> {
         let proxy = Proxy::new(
             &self.connection,
             "com.plebsigner.Signer",
@@ -307,7 +343,91 @@ impl PlebSignerClient {
                 serde_json::from_str(&response.result.unwrap_or_default())?;
             Ok(decrypted.plaintext)
         } else {
-            Err(response.error.unwrap_or("Unknown error".into()).into())
+            Err(ClientError(response.error.unwrap_or_else(|| "Unknown error".into())))
+        }
+    }
+
+    /// Start the bunker listener and get the connection URI
+    pub async fn start_bunker(&self) -> Result<String, ClientError> {
+        let proxy = Proxy::new(
+            &self.connection,
+            "com.plebsigner.Signer",
+            "/com/plebsigner/Signer",
+            "com.plebsigner.Signer1",
+        )
+        .await?;
+
+        let result: String = proxy.call("StartBunker", &()).await?;
+        let response: SignerResponse = serde_json::from_str(&result)?;
+        if response.success {
+            // The result is JSON-escaped, need to unescape
+            let uri = response.result.unwrap_or_default();
+            // Remove surrounding quotes if present
+            let uri = uri.trim_matches('"').to_string();
+            Ok(uri)
+        } else {
+            Err(ClientError(response.error.unwrap_or_else(|| "Unknown error".into())))
+        }
+    }
+
+    /// Stop the bunker listener
+    pub async fn stop_bunker(&self) -> Result<(), ClientError> {
+        let proxy = Proxy::new(
+            &self.connection,
+            "com.plebsigner.Signer",
+            "/com/plebsigner/Signer",
+            "com.plebsigner.Signer1",
+        )
+        .await?;
+
+        let result: String = proxy.call("StopBunker", &()).await?;
+        let response: SignerResponse = serde_json::from_str(&result)?;
+        if response.success {
+            Ok(())
+        } else {
+            Err(ClientError(response.error.unwrap_or_else(|| "Unknown error".into())))
+        }
+    }
+
+    /// Get the current bunker state
+    pub async fn get_bunker_state(&self) -> Result<String, ClientError> {
+        let proxy = Proxy::new(
+            &self.connection,
+            "com.plebsigner.Signer",
+            "/com/plebsigner/Signer",
+            "com.plebsigner.Signer1",
+        )
+        .await?;
+
+        let result: String = proxy.call("GetBunkerState", &()).await?;
+        let response: SignerResponse = serde_json::from_str(&result)?;
+        if response.success {
+            let state = response.result.unwrap_or_default();
+            let state = state.trim_matches('"').to_string();
+            Ok(state)
+        } else {
+            Err(ClientError(response.error.unwrap_or_else(|| "Unknown error".into())))
+        }
+    }
+
+    /// Get the bunker URI (without starting)
+    pub async fn get_bunker_uri(&self) -> Result<String, ClientError> {
+        let proxy = Proxy::new(
+            &self.connection,
+            "com.plebsigner.Signer",
+            "/com/plebsigner/Signer",
+            "com.plebsigner.Signer1",
+        )
+        .await?;
+
+        let result: String = proxy.call("GetBunkerUri", &()).await?;
+        let response: SignerResponse = serde_json::from_str(&result)?;
+        if response.success {
+            let uri = response.result.unwrap_or_default();
+            let uri = uri.trim_matches('"').to_string();
+            Ok(uri)
+        } else {
+            Err(ClientError(response.error.unwrap_or_else(|| "Unknown error".into())))
         }
     }
 }
